@@ -1,0 +1,127 @@
+*&---------------------------------------------------------------------*
+*& Report Z_QR_CODE_MATERIAL
+*&---------------------------------------------------------------------*
+*& Programa para gerar QR Code a partir de um código de material (MATNR)
+*& usando a classe cl_rstx_barcode_renderer
+*&---------------------------------------------------------------------*
+REPORT z_teste_alc_qrcode.
+
+*----------------------------------------------------------------------*
+* Declaração de tipos
+*----------------------------------------------------------------------*
+TYPES: BEGIN OF ty_material,
+         matnr TYPE mara-matnr,
+         maktx TYPE makt-maktx,
+       END OF ty_material.
+
+*----------------------------------------------------------------------*
+* Declaração de variáveis
+*----------------------------------------------------------------------*
+DATA: gv_matnr       TYPE mara-matnr,
+      gs_material    TYPE ty_material,
+      lv_qrcode      TYPE xstring,
+      lv_qrcode_link TYPE string,
+      it_raw_data    TYPE solix_tab.
+
+*----------------------------------------------------------------------*
+* Tela de seleção
+*----------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE text-001.
+PARAMETERS: p_matnr TYPE mara-matnr OBLIGATORY.
+SELECTION-SCREEN END OF BLOCK b1.
+
+*----------------------------------------------------------------------*
+* Eventos
+*----------------------------------------------------------------------*
+INITIALIZATION.
+*  TEXT-001 = 'Seleção de Material'.
+
+START-OF-SELECTION.
+  PERFORM main.
+
+*&---------------------------------------------------------------------*
+*& Form main
+*&---------------------------------------------------------------------*
+FORM main.
+  " Validar material
+  PERFORM check_material.
+
+  " Gerar QR Code
+  PERFORM generate_qrcode.
+
+  " Salvar QR Code
+  PERFORM save_qrcode.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form check_material
+*&---------------------------------------------------------------------*
+FORM check_material.
+  " Verificar se o material existe
+  SELECT SINGLE mara~matnr makt~maktx
+    INTO gs_material
+    FROM mara
+    LEFT JOIN makt ON makt~matnr = mara~matnr
+                   AND makt~spras = sy-langu
+   WHERE mara~matnr = p_matnr.
+
+  IF sy-subrc <> 0.
+    MESSAGE 'Material não encontrado' TYPE 'E'.
+  ENDIF.
+
+  " Preparar o conteúdo do QR code (pode ser personalizado conforme necessidade)
+  CONCATENATE 'Material: ' p_matnr INTO lv_qrcode_link.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form generate_qrcode
+*&---------------------------------------------------------------------*
+FORM generate_qrcode.
+  "declaring variables
+  DATA: lv_qrcode      TYPE xstring,
+        lv_qrcode_link TYPE string.
+
+  " Preparar o conteúdo do QR code
+  lv_qrcode_link = p_matnr.
+
+  "generate QR Code
+  TRY.
+      CALL METHOD cl_rstx_barcode_renderer=>qr_code
+        EXPORTING
+          i_module_size      = 30
+          i_mode             = 'A'
+          i_error_correction = 'H'
+          i_rotation         = 0
+          i_barcode_text     = lv_qrcode_link
+        IMPORTING
+          e_bitmap           = lv_qrcode.
+
+      " download file
+      DATA(it_raw_data) = cl_bcs_convert=>xstring_to_solix( EXPORTING iv_xstring = lv_qrcode ).
+
+      cl_gui_frontend_services=>gui_download(
+        EXPORTING
+          filename = 'QRCode.jpg'
+          filetype = 'BIN'
+          bin_filesize = xstrlen( lv_qrcode )
+        CHANGING
+          data_tab = it_raw_data
+      ).
+
+      " Exibir mensagem de sucesso
+      WRITE: / 'QR Code gerado com sucesso para o material:', p_matnr.
+      WRITE: / 'Descrição:', gs_material-maktx.
+      WRITE: / 'Arquivo salvo como QRCode.jpg no seu computador.'.
+
+    CATCH cx_rstx_barcode_renderer.
+      MESSAGE 'Erro ao gerar o QR Code' TYPE 'E'.
+  ENDTRY.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form save_qrcode
+*&---------------------------------------------------------------------*
+FORM save_qrcode.
+  " Esta funcionalidade já está incluída no form generate_qrcode
+  " usando cl_gui_frontend_services=>gui_download
+ENDFORM.
