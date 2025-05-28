@@ -125,3 +125,32 @@ FORM save_qrcode.
   " Esta funcionalidade já está incluída no form generate_qrcode
   " usando cl_gui_frontend_services=>gui_download
 ENDFORM.
+
+
+
+  " Gerar o QR Code
+  TRY.
+      CALL METHOD cl_rstx_barcode_renderer=>qr_code
+        EXPORTING
+          i_module_size      = 3
+          i_mode             = 'A'
+          i_error_correction = 'H'
+          i_rotation         = 0
+          i_barcode_text     = lv_qrcode_link
+        IMPORTING
+          e_bitmap           = lv_qrcode.
+
+      " Converter o QR Code para base64 para exibição no HTML
+      CALL FUNCTION 'SCMS_BASE64_ENCODE_STR'
+        EXPORTING
+          input  = lv_qrcode
+        IMPORTING
+          output = lv_content.
+
+      " Criar URL para exibição da imagem
+      CONCATENATE 'data:image/png;base64,' lv_content INTO lv_qrcode_url.
+  CATCH cx_root.
+      " Em caso de erro, não exibe o QR Code
+      CLEAR lv_qrcode_url.
+  ENDTRY.
+
